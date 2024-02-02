@@ -40,8 +40,9 @@ usbd-hid = "0.6.1"
 
 embedded-hal-1 = { package = "embedded-hal", version = "1" }
 embedded-hal-async = "1.0.0-rc.3"
-embedded-hal-bus = { version = "0.1.0-rc.3", features = ["async"] }
 embedded-io-async = { version = "0.6.1", features = ["defmt-03"] }
+
+embedded-hal-bus = { version = "0.1.0-rc.3", features = ["async"] }
 embedded-storage = { version = "0.3" }
 static_cell = "2"
 portable-atomic = { version = "1.5", features = ["critical-section"] }
@@ -55,6 +56,7 @@ postcard = "1.0.0"
 # By default, `serde` has the `std` feature enabled, which makes it unsuitable for embedded targets
 # disabling default-features fixes this
 serde = { version = "1.0.*", default-features = false }
+rust-mqtt = {version = "0.3.0", default-features = false, features = ["no_std"] }
 
 [profile.release]
 debug = 2

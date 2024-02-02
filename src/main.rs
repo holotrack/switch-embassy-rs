@@ -5,7 +5,7 @@ use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, EthernetAddress, Ipv4Address, Stack, StackResources};
+use embassy_net::{Config, Stack, StackResources};
 use embassy_net::{IpAddress, IpEndpoint};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::Pio;
@@ -13,8 +13,19 @@ use embassy_rp::{bind_interrupts, gpio};
 use embassy_time::Timer;
 use embedded_io_async::Write;
 use gpio::{Level, Output};
+use rust_mqtt::{
+    client::{client::MqttClient, client_config::ClientConfig},
+    packet::v5::reason_codes::ReasonCode,
+    utils::rng_generator::CountingRng,
+};
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+// use rust_mqtt::{
+//     client::{client::MqttClient, client_config::ClientConfig},
+//     packet::v5::reason_codes::ReasonCode,
+//     utils::rng_generator::CountingRng,
+// };
 
 const WIFI_NETWORK: &str = "SilesianCloud-guest";
 const WIFI_PASSWORD: &str = "T@jlandia123qwe";
@@ -93,9 +104,6 @@ async fn main(spawner: Spawner) {
 
     unwrap!(spawner.spawn(net_task(stack)));
 
-    let mut rx_buffer = [0; 4096];
-    let mut tx_buffer = [0; 4096];
-
     loop {
         //control.join_open(WIFI_NETWORK).await;
         match control.join_wpa2(WIFI_NETWORK, WIFI_PASSWORD).await {
@@ -105,6 +113,13 @@ async fn main(spawner: Spawner) {
             }
         }
     }
+
+    // Wait for DHCP, not necessary when using static IP
+    info!("waiting for DHCP...");
+    while !stack.is_config_up() {
+        Timer::after_millis(100).await;
+    }
+    info!("DHCP is now up!");
 
     // let mut led = Output::new(p.PIN_25, Level::Low);
     // let mut async_input = Input::new(p.PIN_16, Pull::None);
@@ -116,42 +131,71 @@ async fn main(spawner: Spawner) {
     // let mut power_4 = Output::new(p.PIN_17, Level::Low);
     // let mut power_5 = Output::new(p.PIN_16, Level::Low);
 
+    let mut rx_buffer = [0; 4096];
+    let mut tx_buffer = [0; 4096];
+
+    debug!("STARTING");
+
+    let remote_endpoint = IpEndpoint::new(IpAddress::v4(192, 168, 1, 1), 1883);
+    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+    debug!("CONNECT");
+    socket.connect(remote_endpoint).await.unwrap();
+    debug!("AFTER CONNECT");
+
+    let mut config = ClientConfig::new(
+        rust_mqtt::client::client_config::MqttVersion::MQTTv5,
+        CountingRng(20000),
+    );
+    config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
+    config.add_client_id("client");
+    // config.add_username(USERNAME);
+    // config.add_password(PASSWORD);
+    config.max_packet_size = 100;
+    let mut recv_buffer = [0; 80];
+    let mut write_buffer = [0; 80];
+
+    let mut client =
+        MqttClient::<_, 5, _>::new(socket, &mut write_buffer, 80, &mut recv_buffer, 80, config);
+
+    client.connect_to_broker().await.unwrap();
+
     loop {
-        Timer::after_secs(10).await;
-        debug!("STARTING");
-
-        let remote_endpoint = IpEndpoint::new(IpAddress::v4(10, 10, 30, 148), 1234);
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        debug!("CONNECT");
-        socket.connect(remote_endpoint).await.unwrap();
-        debug!("AFTER CONNECT");
-        let data = b"HEllo";
-
-        loop {
-            match socket.write_all(data).await {
-                Ok(()) => {}
-                Err(e) => {
-                    warn!("write error: {:?}", e);
-                    break;
-                }
-            };
-        }
-        // power_0.set_high();
-        // power_1.set_high();
-        // power_2.set_high();
-        // power_3.set_high();
-        // power_4.set_high();
-        // power_5.set_high();
-        Timer::after_secs(2).await;
-
-        info!("done wait_for_high. Turn off LED");
-        // power_0.set_low();
-        // power_1.set_low();
-        // power_2.set_low();
-        // power_3.set_low();
-        // power_4.set_low();
-        // power_5.set_low();
-
-        Timer::after_secs(2).await;
+        client
+            .send_message(
+                "hello",
+                b"hello2",
+                rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
+                true,
+            )
+            .await
+            .unwrap();
+        Timer::after_millis(500).await;
     }
+
+    // loop {
+    //     match socket.write_all(data).await {
+    //         Ok(()) => {}
+    //         Err(e) => {
+    //             warn!("write error: {:?}", e);
+    //             break;
+    //         }
+    //     };
+    // }
+    // power_0.set_high();
+    // power_1.set_high();
+    // power_2.set_high();
+    // power_3.set_high();
+    // power_4.set_high();
+    // power_5.set_high();
+    // Timer::after_secs(2).await;
+
+    // info!("done wait_for_high. Turn off LED");
+    // power_0.set_low();
+    // power_1.set_low();
+    // power_2.set_low();
+    // power_3.set_low();
+    // power_4.set_low();
+    // power_5.set_low();
+
+    // Timer::after_secs(1).await;
 }
