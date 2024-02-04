@@ -13,6 +13,7 @@ use embassy_rp::{bind_interrupts, gpio};
 use embassy_time::Timer;
 use embedded_io_async::Write;
 use gpio::{Level, Output};
+use heapless::Vec;
 use rust_mqtt::{
     client::{client::MqttClient, client_config::ClientConfig},
     packet::v5::reason_codes::ReasonCode,
@@ -156,20 +157,35 @@ async fn main(spawner: Spawner) {
 
     let mut client =
         MqttClient::<_, 5, _>::new(socket, &mut write_buffer, 80, &mut recv_buffer, 80, config);
-
+    debug!("BROKER CONNECTING");
     client.connect_to_broker().await.unwrap();
+    debug!("BROKER AFTER CONNECTING");
+    let mut topic_names = Vec::<_, 2>::new();
+    topic_names.push("switch_0").unwrap();
+    topic_names.push("switch_1").unwrap();
+
+    client.subscribe_to_topics(&topic_names).await.unwrap();
+    Timer::after_millis(500).await;
 
     loop {
-        client
-            .send_message(
-                "hello",
-                b"hello2",
-                rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
-                true,
-            )
-            .await
-            .unwrap();
+        // client
+        //     .send_message(
+        //         "test",
+        //         b"hello2",
+        //         rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
+        //         true,
+        //     )
+        //     .await
+        //     .unwrap();
         Timer::after_millis(500).await;
+        let (topic, message) = match client.receive_message().await {
+            Ok(msg) => msg,
+            Err(err) => {
+                error!("ERROR OCCURED: {}", err);
+                continue;
+            }
+        };
+        info!("topic: {}, message: {}", topic, message);
     }
 
     // loop {
