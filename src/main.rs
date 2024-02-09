@@ -232,21 +232,21 @@ async fn main(spawner: Spawner) {
     //         }
     //     };
     // }
-    // power_0.set_high();
-    // power_1.set_high();
-    // power_2.set_high();
-    // power_3.set_high();
-    // power_4.set_high();
-    // power_5.set_high();
-    // Timer::after_secs(2).await;
+    power_0.set_high();
+    power_1.set_high();
+    power_2.set_high();
+    power_3.set_high();
+    power_4.set_high();
+    power_5.set_high();
+    Timer::after_secs(2).await;
 
-    // info!("done wait_for_high. Turn off LED");
-    // power_0.set_low();
-    // power_1.set_low();
-    // power_2.set_low();
-    // power_3.set_low();
-    // power_4.set_low();
-    // power_5.set_low();
+    info!("done wait_for_high. Turn off LED");
+    power_0.set_low();
+    power_1.set_low();
+    power_2.set_low();
+    power_3.set_low();
+    power_4.set_low();
+    power_5.set_low();
 
     // Timer::after_secs(1).await;
 }
