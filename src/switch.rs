@@ -7,7 +7,6 @@ enum State {
     Off,
 }
 
-type PortType = Output<'d, Pin>;
 
 struct Timer {
     enabled: bool,
@@ -19,10 +18,10 @@ struct Port<'d, T: Pin> {
     duration: Option<Timer>,
 }
 
-struct Switch<'d, Pin> {
-    port_0: Port<'d, Output<'d, Pin>>,
-    port_1: Port<'d, Pin>,
-    port_2: Port<'d, Pin>,
+struct Switch<'d, T: Pin> {
+    port_0: Port<'d, T>,
+    port_1: Port<'d, T>,
+    port_2: Port<'d, T>,
     port_3: Port<'d, T>,
     port_4: Port<'d, T>,
     port_5: Port<'d, T>,
@@ -42,7 +41,7 @@ struct SwitchCard {
     port_5: PortCard,
 }
 
-impl<'d, T: Pin> Switch<'d> {
+impl<'d, T: Pin> Switch<'d, T: Pin> {
     pub fn new(pin_0: T, pin_1: T, pin_2: T, pin_3: T, pin_4: T, pin_5: T) -> Self {
         Switch {
             port_0: Port {
