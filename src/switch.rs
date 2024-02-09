@@ -1,12 +1,11 @@
-use embassy_rp::gpio::Pin;
 use embassy_rp::gpio::Output;
+use embassy_rp::gpio::Pin;
 use embassy_time::Duration;
 
 enum State {
     On,
     Off,
 }
-
 
 struct Timer {
     enabled: bool,
@@ -41,7 +40,7 @@ struct SwitchCard {
     port_5: PortCard,
 }
 
-impl<'d, T: Pin> Switch<'d, T: Pin> {
+impl<'d, T: Pin> Switch<'d, T> {
     pub fn new(pin_0: T, pin_1: T, pin_2: T, pin_3: T, pin_4: T, pin_5: T) -> Self {
         Switch {
             port_0: Port {
@@ -97,7 +96,7 @@ impl<'d, T: Pin> Switch<'d, T: Pin> {
         self.port_5.duration = switch.port_5.duration;
     }
 
-    pub fn apply(self) {
-        self.port_0.pin.
+    pub fn apply(mut self) {
+        self.port_0.pin.set_high();
     }
 }
