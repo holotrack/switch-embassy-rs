@@ -4,23 +4,27 @@
 use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
+use embassy_futures::select::{select, Either};
 use embassy_net::tcp::TcpSocket;
 use embassy_net::{Config, Stack, StackResources};
 use embassy_net::{IpAddress, IpEndpoint};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::Pio;
 use embassy_rp::{bind_interrupts, gpio};
+use embassy_time::Duration;
 use embassy_time::Timer;
-use embedded_io_async::Write;
 use gpio::{Level, Output};
 use heapless::Vec;
+use postcard::from_bytes;
 use rust_mqtt::{
     client::{client::MqttClient, client_config::ClientConfig},
-    packet::v5::reason_codes::ReasonCode,
     utils::rng_generator::CountingRng,
 };
+use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+use crate::switch;
 
 // use rust_mqtt::{
 //     client::{client::MqttClient, client_config::ClientConfig},
@@ -49,6 +53,13 @@ async fn wifi_task(
 #[embassy_executor::task]
 async fn net_task(stack: &'static Stack<cyw43::NetDriver<'static>>) -> ! {
     stack.run().await
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Measurments {
+    cotwo: u16,
+    temp: f32,
+    humdt: f32,
 }
 
 #[embassy_executor::main]
@@ -122,15 +133,15 @@ async fn main(spawner: Spawner) {
     }
     info!("DHCP is now up!");
 
-    // let mut led = Output::new(p.PIN_25, Level::Low);
-    // let mut async_input = Input::new(p.PIN_16, Pull::None);
+    let mut led = Output::new(p.PIN_25, Level::Low);
+    let mut async_input = Input::new(p.PIN_16, Pull::None);
 
-    // let mut power_0 = Output::new(p.PIN_21, Level::Low);
-    // let mut power_1 = Output::new(p.PIN_20, Level::Low);
-    // let mut power_2 = Output::new(p.PIN_19, Level::Low);
-    // let mut power_3 = Output::new(p.PIN_18, Level::Low);
-    // let mut power_4 = Output::new(p.PIN_17, Level::Low);
-    // let mut power_5 = Output::new(p.PIN_16, Level::Low);
+    let mut power_0 = Output::new(p.PIN_21, Level::Low);
+    let mut power_1 = Output::new(p.PIN_20, Level::Low);
+    let mut power_2 = Output::new(p.PIN_19, Level::Low);
+    let mut power_3 = Output::new(p.PIN_18, Level::Low);
+    let mut power_4 = Output::new(p.PIN_17, Level::Low);
+    let mut power_5 = Output::new(p.PIN_16, Level::Low);
 
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
@@ -148,7 +159,7 @@ async fn main(spawner: Spawner) {
         CountingRng(20000),
     );
     config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
-    config.add_client_id("client");
+    config.add_client_id("cotwo-sensor");
     // config.add_username(USERNAME);
     // config.add_password(PASSWORD);
     config.max_packet_size = 100;
@@ -178,14 +189,38 @@ async fn main(spawner: Spawner) {
         //     .await
         //     .unwrap();
         Timer::after_millis(500).await;
-        let (topic, message) = match client.receive_message().await {
-            Ok(msg) => msg,
-            Err(err) => {
-                error!("ERROR OCCURED: {}", err);
-                continue;
+
+        match select(
+            client.receive_message(),
+            Timer::after(Duration::from_secs(2)),
+        )
+        .await
+        {
+            Either::First(msg) => {
+                let (topic, message) = msg.unwrap();
+                info!("topic: {}, message: {}", topic, message);
+
+                let data: Measurments = from_bytes(message).unwrap();
+
+                info!(
+                    "Measurementy przyszly: {} {} {}",
+                    data.cotwo, data.humdt, data.temp
+                );
             }
-        };
-        info!("topic: {}, message: {}", topic, message);
+            Either::Second(_timeout) => {
+                info!("sending ping");
+                client.send_ping().await.unwrap();
+            }
+        }
+
+        // let (topic, message) = match client.receive_message().await {
+        //     Ok(msg) => msg,
+        //     Err(err) => {
+        //         error!("ERROR OCCURED: {}", err);
+        //         continue;
+        //     }
+        // };
+        // info!("topic: {}, message: {}", topic, message);
     }
 
     // loop {
