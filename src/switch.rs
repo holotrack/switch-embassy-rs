@@ -1,6 +1,7 @@
+use defmt::debug;
+use defmt::info;
+use embassy_rp::gpio::AnyPin;
 use embassy_rp::gpio::Output;
-use embassy_rp::gpio::Pin;
-use embassy_time::Duration;
 
 enum State {
     On,
@@ -8,22 +9,21 @@ enum State {
 }
 
 struct Timer {
-    enabled: bool,
-    duration: Duration,
+    seconds: u32,
 }
-struct Port<'d, T: Pin> {
-    pin: Output<'d, T>,
+struct Port<'d> {
+    pin: Output<'d, AnyPin>,
     state: State,
     duration: Option<Timer>,
 }
 
-struct Switch<'d, T: Pin> {
-    port_0: Port<'d, T>,
-    port_1: Port<'d, T>,
-    port_2: Port<'d, T>,
-    port_3: Port<'d, T>,
-    port_4: Port<'d, T>,
-    port_5: Port<'d, T>,
+pub struct Switch<'d> {
+    port_0: Port<'d>,
+    port_1: Port<'d>,
+    port_2: Port<'d>,
+    port_3: Port<'d>,
+    port_4: Port<'d>,
+    port_5: Port<'d>,
 }
 
 struct PortCard {
@@ -31,7 +31,7 @@ struct PortCard {
     duration: Option<Timer>,
 }
 
-struct SwitchCard {
+pub struct SwitchCard {
     port_0: PortCard,
     port_1: PortCard,
     port_2: PortCard,
@@ -40,17 +40,24 @@ struct SwitchCard {
     port_5: PortCard,
 }
 
-impl<'d, T: Pin> Switch<'d, T> {
-    pub fn new(pin_0: T, pin_1: T, pin_2: T, pin_3: T, pin_4: T, pin_5: T) -> Self {
+impl<'d> Switch<'d> {
+    pub fn new(
+        pin_0: Output<'d, AnyPin>,
+        pin_1: Output<'d, AnyPin>,
+        pin_2: Output<'d, AnyPin>,
+        pin_3: Output<'d, AnyPin>,
+        pin_4: Output<'d, AnyPin>,
+        pin_5: Output<'d, AnyPin>,
+    ) -> Self {
         Switch {
             port_0: Port {
                 pin: pin_0,
-                state: State::Off,
+                state: State::On,
                 duration: None,
             },
             port_1: Port {
                 pin: pin_1,
-                state: State::Off,
+                state: State::On,
                 duration: None,
             },
             port_2: Port {
@@ -96,7 +103,41 @@ impl<'d, T: Pin> Switch<'d, T> {
         self.port_5.duration = switch.port_5.duration;
     }
 
-    pub fn apply(mut self) {
-        self.port_0.pin.set_high();
+    fn apply_port(port: &mut Port<'d>) {
+        debug!("APPLY PORT");
+        match port {
+            Port {
+                state: State::On, ..
+            } => {
+                debug!("SET TO HIGH");
+                port.pin.set_high();
+            }
+            Port {
+                state: State::Off, ..
+            } => {
+                debug!("SET TO LOW");
+                port.pin.set_low();
+            }
+        }
+
+        // This need to be still properly implemented
+        match port {
+            Port { duration: None, .. } => info!("Duration not provided, ommiting "),
+            Port {
+                duration: Some(dur),
+                ..
+            } => info!("Duration provided: {}", dur.seconds),
+        }
+    }
+
+    pub fn apply(&mut self) {
+        debug!("APPLY PORT");
+
+        Switch::apply_port(&mut self.port_0);
+        Switch::apply_port(&mut self.port_1);
+        Switch::apply_port(&mut self.port_2);
+        Switch::apply_port(&mut self.port_3);
+        Switch::apply_port(&mut self.port_4);
+        Switch::apply_port(&mut self.port_5);
     }
 }

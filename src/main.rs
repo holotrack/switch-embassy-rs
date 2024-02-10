@@ -8,12 +8,14 @@ use embassy_futures::select::{select, Either};
 use embassy_net::tcp::TcpSocket;
 use embassy_net::{Config, Stack, StackResources};
 use embassy_net::{IpAddress, IpEndpoint};
+use embassy_rp::gpio::{Pin, Pull};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::Pio;
 use embassy_rp::{bind_interrupts, gpio};
 use embassy_time::Duration;
+
 use embassy_time::Timer;
-use gpio::{Level, Output};
+use gpio::{Input, Level, Output};
 use heapless::Vec;
 use postcard::from_bytes;
 use rust_mqtt::{
@@ -22,9 +24,11 @@ use rust_mqtt::{
 };
 use serde::{Deserialize, Serialize};
 use static_cell::StaticCell;
+use switch_embassy_rs::switch::Switch;
 use {defmt_rtt as _, panic_probe as _};
 
-use crate::switch;
+extern crate switch_embassy_rs;
+use crate::switch_embassy_rs::switch;
 
 // use rust_mqtt::{
 //     client::{client::MqttClient, client_config::ClientConfig},
@@ -133,15 +137,20 @@ async fn main(spawner: Spawner) {
     }
     info!("DHCP is now up!");
 
-    let mut led = Output::new(p.PIN_25, Level::Low);
-    let mut async_input = Input::new(p.PIN_16, Pull::None);
+    //We need to .degrade() to have AnyPin type becuse its concrete type not trait. And we can not pass trait to generic type on embassy/embedded
+    let power_0 = Output::new(p.PIN_21.degrade(), Level::Low);
+    let power_1 = Output::new(p.PIN_20.degrade(), Level::Low);
+    let power_2 = Output::new(p.PIN_19.degrade(), Level::Low);
+    let power_3 = Output::new(p.PIN_18.degrade(), Level::Low);
+    let power_4 = Output::new(p.PIN_17.degrade(), Level::Low);
+    let power_5 = Output::new(p.PIN_16.degrade(), Level::Low);
 
-    let mut power_0 = Output::new(p.PIN_21, Level::Low);
-    let mut power_1 = Output::new(p.PIN_20, Level::Low);
-    let mut power_2 = Output::new(p.PIN_19, Level::Low);
-    let mut power_3 = Output::new(p.PIN_18, Level::Low);
-    let mut power_4 = Output::new(p.PIN_17, Level::Low);
-    let mut power_5 = Output::new(p.PIN_16, Level::Low);
+    static SWITCH: StaticCell<Switch> = StaticCell::new();
+
+    let switch = SWITCH.init(switch::Switch::new(
+        power_0, power_1, power_2, power_3, power_4, power_5,
+    ));
+    switch.apply();
 
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
@@ -179,74 +188,32 @@ async fn main(spawner: Spawner) {
     Timer::after_millis(500).await;
 
     loop {
-        // client
-        //     .send_message(
-        //         "test",
-        //         b"hello2",
-        //         rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
-        //         true,
-        //     )
-        //     .await
-        //     .unwrap();
-        Timer::after_millis(500).await;
+        Timer::after_millis(5000).await;
+        // power_0.set_high();
 
-        match select(
-            client.receive_message(),
-            Timer::after(Duration::from_secs(2)),
-        )
-        .await
-        {
-            Either::First(msg) => {
-                let (topic, message) = msg.unwrap();
-                info!("topic: {}, message: {}", topic, message);
+        Timer::after_millis(5000).await;
+        // power_0.set_low();
 
-                let data: Measurments = from_bytes(message).unwrap();
+        // match select(
+        //     client.receive_message(),
+        //     Timer::after(Duration::from_secs(2)),
+        // )
+        // .await
+        // {
+        //     Either::First(msg) => {
+        //         let (topic, message) = msg.unwrap();
+        //         info!("topic: {}, message: {}", topic, message);
 
-                info!(
-                    "Measurementy przyszly: {} {} {}",
-                    data.cotwo, data.humdt, data.temp
-                );
-            }
-            Either::Second(_timeout) => {
-                info!("sending ping");
-                client.send_ping().await.unwrap();
-            }
-        }
+        //         let data: Measurments = from_bytes(message).unwrap();
 
-        // let (topic, message) = match client.receive_message().await {
-        //     Ok(msg) => msg,
-        //     Err(err) => {
-        //         error!("ERROR OCCURED: {}", err);
-        //         continue;
+        //         info!(
+        //             "Measurementy przyszly: {} {} {}",
+        //             data.cotwo, data.humdt, data.temp
+        //         );
         //     }
-        // };
-        // info!("topic: {}, message: {}", topic, message);
+        //     Either::Second(_timeout) => {
+        //         info!("sending ping");
+        //         client.send_ping().await.unwrap();
+        //     }
     }
-
-    // loop {
-    //     match socket.write_all(data).await {
-    //         Ok(()) => {}
-    //         Err(e) => {
-    //             warn!("write error: {:?}", e);
-    //             break;
-    //         }
-    //     };
-    // }
-    power_0.set_high();
-    power_1.set_high();
-    power_2.set_high();
-    power_3.set_high();
-    power_4.set_high();
-    power_5.set_high();
-    Timer::after_secs(2).await;
-
-    info!("done wait_for_high. Turn off LED");
-    power_0.set_low();
-    power_1.set_low();
-    power_2.set_low();
-    power_3.set_low();
-    power_4.set_low();
-    power_5.set_low();
-
-    // Timer::after_secs(1).await;
 }
