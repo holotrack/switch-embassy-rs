@@ -15,6 +15,7 @@ use embassy_rp::{bind_interrupts, gpio};
 use embassy_time::Duration;
 
 use embassy_time::Timer;
+use export::debug;
 use gpio::{Input, Level, Output};
 use heapless::Vec;
 use postcard::from_bytes;
@@ -57,13 +58,6 @@ async fn wifi_task(
 #[embassy_executor::task]
 async fn net_task(stack: &'static Stack<cyw43::NetDriver<'static>>) -> ! {
     stack.run().await
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Measurments {
-    cotwo: u16,
-    temp: f32,
-    humdt: f32,
 }
 
 #[embassy_executor::main]
@@ -154,70 +148,39 @@ async fn main(spawner: Spawner) {
 
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
-
-    debug!("STARTING");
-
-    let remote_endpoint = IpEndpoint::new(IpAddress::v4(192, 168, 1, 1), 1883);
-    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-    debug!("CONNECT");
-    socket.connect(remote_endpoint).await.unwrap();
-    debug!("AFTER CONNECT");
-
-    let mut config = ClientConfig::new(
-        rust_mqtt::client::client_config::MqttVersion::MQTTv5,
-        CountingRng(20000),
-    );
-    config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
-    config.add_client_id("cotwo-sensor");
-    // config.add_username(USERNAME);
-    // config.add_password(PASSWORD);
-    config.max_packet_size = 100;
-    let mut recv_buffer = [0; 80];
-    let mut write_buffer = [0; 80];
-
-    let mut client =
-        MqttClient::<_, 5, _>::new(socket, &mut write_buffer, 80, &mut recv_buffer, 80, config);
-    debug!("BROKER CONNECTING");
-    client.connect_to_broker().await.unwrap();
-    debug!("BROKER AFTER CONNECTING");
-    let mut topic_names = Vec::<_, 2>::new();
-    topic_names.push("switch_0").unwrap();
-    topic_names.push("switch_1").unwrap();
-
-    client.subscribe_to_topics(&topic_names).await.unwrap();
-    Timer::after_millis(500).await;
+    let mut data = [0u8; 1024];
 
     loop {
-        Timer::after_millis(1000).await;
-        match select(
-            client.receive_message(),
-            Timer::after(Duration::from_secs(2)),
-        )
-        .await
-        {
-            Either::First(msg) => match msg {
-                Ok((topic, message)) => {
-                    info!("topic: {}, message: {}", topic, message);
+        debug!("SOCKET IN MAIN");
+        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        debug!("AFTER SOCKET IN MAIN");
 
-                    let data: switch::SwitchCard = from_bytes(message).unwrap();
+        socket.set_timeout(Some(Duration::from_secs(10)));
+        debug!("AFTER TIMEOUT IN MAIN");
 
-                    switch.set_switch(data);
-                    switch.apply();
-                }
-                Err(err) => {
-                    error!("Reciving message error: {}", err);
-                    continue;
-                }
-            },
-            Either::Second(_timeout) => {
-                info!("sending ping");
-                match client.send_ping().await {
-                    Ok(_) => info!("Ping send"),
-                    Err(err) => {
-                        error!("Sending ping error: {}", err);
-                        continue;
-                    }
-                }
+        debug!("BEFORE SOCKET.ACCEPT SET IN MAIN");
+
+        info!("Listening on TCP:1234...");
+        if let Err(e) = socket.accept(1234).await {
+            warn!("accept error: {:?}", e);
+            continue;
+        }
+
+        info!("Received connection from {:?}", socket.remote_endpoint());
+        match socket.read(&mut data).await {
+            Ok(_) => {
+                debug!("START READ");
+                debug!("Read data: {:?}", data);
+
+                let switch_card: switch::SwitchCard = postcard::from_bytes(&data).unwrap();
+
+                switch.set_switch(switch_card);
+                switch.apply();
+                debug!("ZA APPLY");
+            }
+
+            Err(e) => {
+                println!("Failed to receive data: {}", e);
             }
         }
     }
