@@ -2,11 +2,16 @@ use defmt::debug;
 use defmt::info;
 use embassy_rp::gpio::AnyPin;
 use embassy_rp::gpio::Output;
+use serde::{Deserialize, Serialize};
 
-enum State {
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+
+pub enum State {
     On,
     Off,
 }
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 
 struct Timer {
     seconds: u32,
@@ -25,19 +30,21 @@ pub struct Switch<'d> {
     port_4: Port<'d>,
     port_5: Port<'d>,
 }
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 
-struct PortCard {
-    state: State,
-    duration: Option<Timer>,
+pub struct PortCard {
+    pub state: State,
+    pub duration: Option<Timer>,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct SwitchCard {
-    port_0: PortCard,
-    port_1: PortCard,
-    port_2: PortCard,
-    port_3: PortCard,
-    port_4: PortCard,
-    port_5: PortCard,
+    pub port_0: PortCard,
+    pub port_1: PortCard,
+    pub port_2: PortCard,
+    pub port_3: PortCard,
+    pub port_4: PortCard,
+    pub port_5: PortCard,
 }
 
 impl<'d> Switch<'d> {
@@ -52,12 +59,12 @@ impl<'d> Switch<'d> {
         Switch {
             port_0: Port {
                 pin: pin_0,
-                state: State::On,
+                state: State::Off,
                 duration: None,
             },
             port_1: Port {
                 pin: pin_1,
-                state: State::On,
+                state: State::Off,
                 duration: None,
             },
             port_2: Port {
@@ -83,7 +90,7 @@ impl<'d> Switch<'d> {
         }
     }
 
-    pub fn set_switch(mut self, switch: SwitchCard) {
+    pub fn set_switch(&mut self, switch: SwitchCard) {
         self.port_0.state = switch.port_0.state;
         self.port_0.duration = switch.port_0.duration;
 
@@ -110,13 +117,13 @@ impl<'d> Switch<'d> {
                 state: State::On, ..
             } => {
                 debug!("SET TO HIGH");
-                port.pin.set_high();
+                port.pin.set_low();
             }
             Port {
                 state: State::Off, ..
             } => {
                 debug!("SET TO LOW");
-                port.pin.set_low();
+                port.pin.set_high();
             }
         }
 

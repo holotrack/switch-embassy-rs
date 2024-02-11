@@ -188,32 +188,37 @@ async fn main(spawner: Spawner) {
     Timer::after_millis(500).await;
 
     loop {
-        Timer::after_millis(5000).await;
-        // power_0.set_high();
+        Timer::after_millis(1000).await;
+        match select(
+            client.receive_message(),
+            Timer::after(Duration::from_secs(2)),
+        )
+        .await
+        {
+            Either::First(msg) => match msg {
+                Ok((topic, message)) => {
+                    info!("topic: {}, message: {}", topic, message);
 
-        Timer::after_millis(5000).await;
-        // power_0.set_low();
+                    let data: switch::SwitchCard = from_bytes(message).unwrap();
 
-        // match select(
-        //     client.receive_message(),
-        //     Timer::after(Duration::from_secs(2)),
-        // )
-        // .await
-        // {
-        //     Either::First(msg) => {
-        //         let (topic, message) = msg.unwrap();
-        //         info!("topic: {}, message: {}", topic, message);
-
-        //         let data: Measurments = from_bytes(message).unwrap();
-
-        //         info!(
-        //             "Measurementy przyszly: {} {} {}",
-        //             data.cotwo, data.humdt, data.temp
-        //         );
-        //     }
-        //     Either::Second(_timeout) => {
-        //         info!("sending ping");
-        //         client.send_ping().await.unwrap();
-        //     }
+                    switch.set_switch(data);
+                    switch.apply();
+                }
+                Err(err) => {
+                    error!("Reciving message error: {}", err);
+                    continue;
+                }
+            },
+            Either::Second(_timeout) => {
+                info!("sending ping");
+                match client.send_ping().await {
+                    Ok(_) => info!("Ping send"),
+                    Err(err) => {
+                        error!("Sending ping error: {}", err);
+                        continue;
+                    }
+                }
+            }
+        }
     }
 }
