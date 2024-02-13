@@ -4,26 +4,23 @@
 use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_futures::select::{select, Either};
+
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, DhcpConfig, Stack, StackResources};
-use embassy_net::{IpAddress, IpEndpoint};
-use embassy_rp::gpio::{AnyPin, Pin, Pull};
+use embassy_net::{Config, Stack, StackResources};
+
+use embassy_rp::gpio::{AnyPin, Pin};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::Pio;
 use embassy_rp::{bind_interrupts, gpio};
 use embassy_time::Duration;
 
 use embassy_time::Timer;
-use export::debug;
-use gpio::{Input, Level, Output};
+
+use gpio::{Level, Output};
 use heapless::Vec;
-use postcard::from_bytes;
-use rust_mqtt::{
-    client::{client::MqttClient, client_config::ClientConfig},
-    utils::rng_generator::CountingRng,
-};
-use serde::{Deserialize, Serialize};
+
+
+
 use static_cell::StaticCell;
 use switch_embassy_rs::switch::Switch;
 use {defmt_rtt as _, panic_probe as _};

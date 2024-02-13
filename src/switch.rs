@@ -1,4 +1,3 @@
-use defmt::debug;
 use defmt::error;
 use defmt::info;
 use embassy_rp::gpio::AnyPin;
