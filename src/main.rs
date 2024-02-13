@@ -6,9 +6,9 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embassy_futures::select::{select, Either};
 use embassy_net::tcp::TcpSocket;
-use embassy_net::{Config, Stack, StackResources};
+use embassy_net::{Config, DhcpConfig, Stack, StackResources};
 use embassy_net::{IpAddress, IpEndpoint};
-use embassy_rp::gpio::{Pin, Pull};
+use embassy_rp::gpio::{AnyPin, Pin, Pull};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::Pio;
 use embassy_rp::{bind_interrupts, gpio};
@@ -39,6 +39,8 @@ use crate::switch_embassy_rs::switch;
 
 const WIFI_NETWORK: &str = "SilesianCloud-guest";
 const WIFI_PASSWORD: &str = "T@jlandia123qwe";
+
+const SOCKETS_AMMOUNT: usize = 6;
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => embassy_rp::pio::InterruptHandler<PIO0>;
@@ -92,7 +94,9 @@ async fn main(spawner: Spawner) {
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
-    let config = Config::dhcpv4(Default::default());
+    let mut dhcp = embassy_net::DhcpConfig::default();
+    dhcp.hostname = Some(heapless::String::try_from("switch-0").unwrap());
+    let config = Config::dhcpv4(dhcp);
     //let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
     //    address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 69, 2), 24),
     //    dns_servers: Vec::new(),
@@ -139,11 +143,18 @@ async fn main(spawner: Spawner) {
     let power_4 = Output::new(p.PIN_17.degrade(), Level::Low);
     let power_5 = Output::new(p.PIN_16.degrade(), Level::Low);
 
-    static SWITCH: StaticCell<Switch> = StaticCell::new();
+    static SWITCH: StaticCell<Switch<SOCKETS_AMMOUNT>> = StaticCell::new();
+    static POWER_SOCKETS: StaticCell<Vec<Output<'_, AnyPin>, 6>> = StaticCell::new();
+    let power_sockets = POWER_SOCKETS.init(Vec::<Output<'_, AnyPin>, 6>::new());
 
-    let switch = SWITCH.init(switch::Switch::new(
-        power_0, power_1, power_2, power_3, power_4, power_5,
-    ));
+    let _ = power_sockets.push(power_0);
+    let _ = power_sockets.push(power_1);
+    let _ = power_sockets.push(power_2);
+    let _ = power_sockets.push(power_3);
+    let _ = power_sockets.push(power_4);
+    let _ = power_sockets.push(power_5);
+
+    let switch = SWITCH.init(switch::Switch::new(power_sockets));
     switch.apply();
 
     let mut rx_buffer = [0; 4096];
@@ -172,10 +183,10 @@ async fn main(spawner: Spawner) {
                 debug!("START READ");
                 debug!("Read data: {:?}", data);
 
-                let switch_card: switch::SwitchCard = postcard::from_bytes(&data).unwrap();
+                let port_card: switch::PortCard = postcard::from_bytes(&data).unwrap();
 
-                switch.set_switch(switch_card);
-                switch.apply();
+                switch.set_port(port_card);
+                // switch.apply();
                 debug!("ZA APPLY");
             }
 
