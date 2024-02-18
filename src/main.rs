@@ -169,41 +169,51 @@ async fn main(spawner: Spawner) {
             warn!("accept error: {:?}", e);
             continue;
         }
-
         info!("Received connection from {:?}", socket.remote_endpoint());
-        match socket.read(&mut data).await {
-            Ok(_) => {
-                debug!("START READ");
-                debug!("Read data: {:?}", data);
 
-                let message: Message = postcard::from_bytes(&data).unwrap();
+        loop {
+            debug!("READ");
+            match socket.read(&mut data).await {
+                Ok(0) => {
+                    warn!("read EOF");
+                    break;
+                }
+                Ok(_) => {
+                    debug!("START READ");
+                    debug!("Read data: {:?}", data);
 
-                match message {
-                    Message::SetPort(card) => {
-                        switch.set_port(card);
-                        // switch.apply();
-                        debug!("ZA APPLY");
-                    }
-                    Message::GetPortStatus(card) => {
-                        let status = Message::GetPortStatus(switch.get_port(card.unwrap()));
-                        let status_slice = postcard::to_slice(&status, &mut data).unwrap();
+                    let message: Message = postcard::from_bytes(&data).unwrap();
 
-                        debug!("Status slice: {:?}", status_slice);
+                    match message {
+                        Message::SetPort(card) => {
+                            switch.set_port(card);
+                            // switch.apply();
+                            info!("Port setted");
+                        }
+                        Message::GetPortStatus(card) => {
+                            let status = Message::GetPortStatus(switch.get_port(card.unwrap()));
+                            let status_slice = postcard::to_slice(&status, &mut data).unwrap();
 
-                        match socket.write_all(&status_slice).await {
-                            Ok(()) => {
-                                info!("Status sent")
-                            }
-                            Err(e) => {
-                                warn!("write error: {:?}", e);
-                                break;
-                            }
-                        };
+                            debug!("Status slice: {:?}", status_slice);
+
+                            debug!("WRITE ALL BEFORE");
+
+                            match socket.write_all(status_slice).await {
+                                Ok(()) => {
+                                    info!("Status sent");
+                                }
+                                Err(e) => {
+                                    error!("write error: {:?}", e);
+                                    break;
+                                }
+                            };
+                        }
                     }
                 }
-            }
-            Err(e) => {
-                println!("Failed to receive data: {}", e);
+                Err(e) => {
+                    println!("Failed to receive data: {}", e);
+                    break;
+                }
             }
         }
     }
