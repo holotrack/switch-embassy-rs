@@ -16,17 +16,13 @@ use embassy_time::Duration;
 
 use embassy_time::Timer;
 
+use embedded_io_async::Write;
 use gpio::{Level, Output};
 use heapless::Vec;
 
-
-
 use static_cell::StaticCell;
-use switch_embassy_rs::switch::Switch;
+use switch_embassy_rs::switch::{Message, Switch};
 use {defmt_rtt as _, panic_probe as _};
-
-extern crate switch_embassy_rs;
-use crate::switch_embassy_rs::switch;
 
 // use rust_mqtt::{
 //     client::{client::MqttClient, client_config::ClientConfig},
@@ -151,7 +147,7 @@ async fn main(spawner: Spawner) {
     let _ = power_sockets.push(power_4);
     let _ = power_sockets.push(power_5);
 
-    let switch = SWITCH.init(switch::Switch::new(power_sockets));
+    let switch = SWITCH.init(Switch::new(power_sockets));
     switch.apply();
 
     let mut rx_buffer = [0; 4096];
@@ -180,13 +176,32 @@ async fn main(spawner: Spawner) {
                 debug!("START READ");
                 debug!("Read data: {:?}", data);
 
-                let port_card: switch::PortCard = postcard::from_bytes(&data).unwrap();
+                let message: Message = postcard::from_bytes(&data).unwrap();
 
-                switch.set_port(port_card);
-                // switch.apply();
-                debug!("ZA APPLY");
+                match message {
+                    Message::SetPort(card) => {
+                        switch.set_port(card);
+                        // switch.apply();
+                        debug!("ZA APPLY");
+                    }
+                    Message::GetPortStatus(card) => {
+                        let status = Message::GetPortStatus(switch.get_port(card.unwrap()));
+                        let status_slice = postcard::to_slice(&status, &mut data).unwrap();
+
+                        debug!("Status slice: {:?}", status_slice);
+
+                        match socket.write_all(&status_slice).await {
+                            Ok(()) => {
+                                info!("Status sent")
+                            }
+                            Err(e) => {
+                                warn!("write error: {:?}", e);
+                                break;
+                            }
+                        };
+                    }
+                }
             }
-
             Err(e) => {
                 println!("Failed to receive data: {}", e);
             }

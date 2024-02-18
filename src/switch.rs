@@ -5,18 +5,18 @@ use embassy_rp::gpio::Output;
 use heapless::Vec;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 pub enum State {
     On,
     Off,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 
 struct Timer {
     seconds: u32,
 }
+
 struct Port<'d> {
     pin: &'d mut Output<'d, AnyPin>,
     state: State,
@@ -73,6 +73,18 @@ impl<'d, const N: usize> Switch<'d, N> {
         self.apply_port(card.port);
     }
 
+    pub fn get_port(&mut self, card: PortCard) -> Option<PortCard> {
+        info!("Getting status of port {}", card.port);
+        match self.0.get_mut(card.port) {
+            Some(p) => Some(PortCard {
+                port: card.port,
+                state: p.state,
+                duration: p.duration,
+            }),
+            None => None,
+        }
+    }
+
     fn apply_port(&mut self, port: usize) {
         match self.0.get_mut(port) {
             Some(p) => match p.state {
@@ -94,5 +106,11 @@ impl<'d, const N: usize> Switch<'d, N> {
 pub struct PortCard {
     pub port: usize,
     pub state: State,
-    pub duration: Option<Timer>,
+    duration: Option<Timer>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub enum Message {
+    SetPort(PortCard),
+    GetPortStatus(Option<PortCard>),
 }
