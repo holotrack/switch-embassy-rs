@@ -123,9 +123,7 @@ async fn main(spawner: Spawner) {
 
     // Wait for DHCP, not necessary when using static IP
     info!("waiting for DHCP...");
-    while !stack.is_config_up() {
-        Timer::after_millis(100).await;
-    }
+    stack.wait_config_up().await;
     info!("DHCP is now up!");
 
     //We need to .degrade() to have AnyPin type becuse its concrete type not trait. And we can not pass trait to generic type on embassy/embedded
