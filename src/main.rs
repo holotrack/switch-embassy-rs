@@ -14,8 +14,6 @@ use embassy_rp::pio::Pio;
 use embassy_rp::{bind_interrupts, gpio};
 use embassy_time::Duration;
 
-use embassy_time::Timer;
-
 use embedded_io_async::Write;
 use gpio::{Level, Output};
 use heapless::Vec;
@@ -23,12 +21,6 @@ use heapless::Vec;
 use static_cell::StaticCell;
 use switch_embassy_rs::switch::{Message, Switch};
 use {defmt_rtt as _, panic_probe as _};
-
-// use rust_mqtt::{
-//     client::{client::MqttClient, client_config::ClientConfig},
-//     packet::v5::reason_codes::ReasonCode,
-//     utils::rng_generator::CountingRng,
-// };
 
 const WIFI_NETWORK: &str = "SilesianCloud-guest";
 const WIFI_PASSWORD: &str = "T@jlandia123qwe";
@@ -180,7 +172,13 @@ async fn main(spawner: Spawner) {
                     debug!("START READ");
                     debug!("Read data: {:?}", data);
 
-                    let message: Message = postcard::from_bytes(&data).unwrap();
+                    let message: Message = match postcard::from_bytes(&data) {
+                        Ok(msg) => msg,
+                        Err(_) => {
+                            error!("Serde from_bytes error probably recived wrong packet from someone else than controller");
+                            break;
+                        }
+                    };
 
                     match message {
                         Message::SetPort(card) => {
